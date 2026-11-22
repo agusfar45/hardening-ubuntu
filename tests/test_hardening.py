@@ -249,6 +249,20 @@ class Variantes(Servidor):
         self.assertIn("SSH: no acepta contraseñas", out.split("--- Después ---")[1])
 
 
+class AuditoriaApagada(Servidor):
+    """Encontrado en el CI: en la imagen de Ubuntu 22.04 de GitHub, auditd corre y las reglas se cargan,
+    pero el kernel tiene la auditoría apagada (enabled 0) y no registra nada."""
+
+    def test_detecta_y_activa(self):
+        (self.estado / "audit_cargado").touch()
+        (self.raiz / "etc/audit/rules.d/90-hardening.rules").write_text("-w /usr/sbin/useradd -p x -k usuarios\n")
+        codigo, out = self.correr("--auditar", HARDENING_STUB_AUDIT_APAGADO="1")
+        self.assertIn("auditoría del kernel está APAGADA (enabled 0)", out)
+        codigo, out = self.correr("--aplicar", HARDENING_STUB_AUDIT_APAGADO="1")
+        self.assertIn("-e 1", self.leer("/etc/audit/rules.d/90-hardening.rules"))
+        self.assertIn("reglas cargadas y auditoría del kernel activa", out.split("--- Después ---")[1])
+
+
 class CambioDePuerto(Servidor):
     def test_puerto_nuevo_y_socket(self):
         (self.estado / "activos.json").write_text('["ssh", "ssh.socket"]')

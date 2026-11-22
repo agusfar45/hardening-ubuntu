@@ -210,8 +210,15 @@ auditar() {
   if fail2ban-client status sshd > /dev/null 2>&1; then control OK "fail2ban: jail sshd activa"
   else control FALTA "fail2ban: sin protección de SSH"; fi
 
-  if auditctl -l 2>/dev/null | grep -q "usuarios"; then control OK "auditd: reglas de auditoría cargadas"
-  else control FALTA "auditd: no hay reglas para usuarios, sudo, transferencias y borrado de logs"; fi
+  if ! auditctl -l 2>/dev/null | grep -q "usuarios"; then
+    control FALTA "auditd: no hay reglas para usuarios, sudo, transferencias y borrado de logs"
+  elif auditctl -s 2>/dev/null | grep -q "^enabled 0"; then
+    # Visto en la imagen de Ubuntu 22.04 de GitHub Actions: reglas cargadas, kernel sin auditar
+    control FALTA "auditd: las reglas están cargadas pero la auditoría del kernel está APAGADA (enabled 0)" \
+      "No se registra nada aunque 'auditctl -l' muestre las reglas. Se activa con: auditctl -e 1"
+  else
+    control OK "auditd: reglas cargadas y auditoría del kernel activa"
+  fi
 
   if [[ -d $RAIZ/var/log/journal ]] || grep -rqs "^Storage=persistent" "$RAIZ"/etc/systemd/journald.conf*; then
     control OK "Logs: journal persistente"
@@ -445,6 +452,8 @@ paso_auditd() {
   reglas+="## Comandos ejecutados como root por usuarios que iniciaron sesión"$'\n'
   reglas+="-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k comandos_root"$'\n'
   reglas+="-a always,exit -F arch=b32 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k comandos_root"$'\n'
+  reglas+="## Activar la auditoría del kernel: hay imágenes que la traen apagada (auditctl -s: enabled 0)"$'\n'
+  reglas+="-e 1"$'\n'
   escribir /etc/audit/rules.d/90-hardening.rules 640 < <(printf '%s' "$reglas")
   ejecutar systemctl enable --now auditd
   if (( CAMBIO )) && ! (( SIMULAR )); then
@@ -452,6 +461,13 @@ paso_auditd() {
       control AVISO "auditd está en modo inmutable: las reglas nuevas se cargan al reiniciar"
     else
       ejecutar augenrules --load
+    fi
+  fi
+  if ! (( SIMULAR )) && auditctl -s 2>/dev/null | grep -q "^enabled 0"; then
+    ejecutar auditctl -e 1
+    if grep -qw "audit=0" "$RAIZ/proc/cmdline" 2>/dev/null; then
+      control AVISO "El kernel arrancó con audit=0: la auditoría queda activa hasta el próximo reinicio" \
+        "Para que sea permanente, sacar audit=0 de GRUB_CMDLINE_LINUX en /etc/default/grub y correr update-grub"
     fi
   fi
   return 0

@@ -147,8 +147,16 @@ def fail2ban_client(args):
 
 
 def auditctl(args):
+    if args[:2] == ["-e", "1"]:
+        (ESTADO / "audit_habilitado").touch()
+        return 0
     if "-s" in args:
-        print("enabled 2" if os.environ.get("HARDENING_STUB_AUDIT_INMUTABLE") == "1" else "enabled 1")
+        if os.environ.get("HARDENING_STUB_AUDIT_INMUTABLE") == "1":
+            print("enabled 2")
+        elif os.environ.get("HARDENING_STUB_AUDIT_APAGADO") == "1" and not (ESTADO / "audit_habilitado").exists():
+            print("enabled 0")  # como la imagen de Ubuntu 22.04 de GitHub Actions
+        else:
+            print("enabled 1")
         return 0
     if "-l" in args and (ESTADO / "audit_cargado").exists():
         for f in sorted((RAIZ / "etc/audit/rules.d").glob("*.rules")):
@@ -160,6 +168,9 @@ def auditctl(args):
 
 def augenrules(args):
     (ESTADO / "audit_cargado").touch()
+    for f in (RAIZ / "etc/audit/rules.d").glob("*.rules"):
+        if "\n-e 1\n" in "\n" + f.read_text():
+            (ESTADO / "audit_habilitado").touch()  # "-e 1" en las reglas activa la auditoría
     return 0
 
 

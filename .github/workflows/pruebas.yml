@@ -66,8 +66,8 @@ jobs:
           sudo auditctl -l | grep -E "usuarios|transferencia|antiforense|borrado_logs|comandos_root"
           echo "curl en el PATH: $(type -a curl | tr '\n' ' ')"
           /usr/bin/curl -s -o /dev/null https://example.com || true
-          # auditd escribe en disco cada 50 registros (flush = INCREMENTAL_ASYNC, freq = 50):
-          # se genera actividad para que el evento llegue al archivo antes de buscarlo
+          # auditd escribe en disco de forma asíncrona (flush = INCREMENTAL_ASYNC): un poco de
+          # actividad y una pausa para que el evento esté en el archivo al buscarlo
           for i in $(seq 25); do sudo true; done
           sleep 2
           echo "auditd registró el uso de curl:"
