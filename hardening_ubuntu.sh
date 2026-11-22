@@ -463,7 +463,16 @@ paso_auditd() {
       ejecutar augenrules --load
     fi
   fi
-  if ! (( SIMULAR )) && auditctl -s 2>/dev/null | grep -q "^enabled 0"; then
+  asegurar_auditoria "las reglas se cargaron con la auditoría del kernel apagada"
+  return 0
+}
+
+asegurar_auditoria() {  # $1 = qué la apagó. Vuelve a activar la auditoría del kernel si está en "enabled 0".
+  (( SIMULAR )) && return 0
+  omitido auditd && return 0
+  command -v auditctl > /dev/null || return 0
+  if auditctl -s 2>/dev/null | grep -q "^enabled 0"; then
+    log "  ${AMARILLO}La auditoría del kernel está apagada ($1): se vuelve a activar${NORMAL}"
     ejecutar auditctl -e 1
     if grep -qw "audit=0" "$RAIZ/proc/cmdline" 2>/dev/null; then
       control AVISO "El kernel arrancó con audit=0: la auditoría queda activa hasta el próximo reinicio" \
@@ -485,6 +494,7 @@ EOF
   if (( CAMBIO )); then
     (( SIMULAR )) || mkdir -p "$RAIZ/var/log/journal"
     ejecutar systemctl restart systemd-journald
+    asegurar_auditoria "después de reiniciar systemd-journald"
   fi
   if [[ -n $SYSLOG_REMOTO ]]; then
     local host="${SYSLOG_REMOTO%:*}" puerto="${SYSLOG_REMOTO##*:}"
@@ -531,7 +541,10 @@ kernel.dmesg_restrict = 1
 fs.protected_symlinks = 1
 fs.protected_hardlinks = 1
 EOF
-  (( CAMBIO )) && ejecutar sysctl --system
+  if (( CAMBIO )); then
+    ejecutar sysctl --system
+    asegurar_auditoria "después de aplicar sysctl"
+  fi
   return 0
 }
 
@@ -607,6 +620,7 @@ main() {
       omitido journald        || paso_journald
       omitido actualizaciones || paso_actualizaciones
       omitido sysctl          || paso_sysctl
+      asegurar_auditoria "al terminar los pasos"
       (( SIMULAR )) && { log ""; log "Simulación terminada: no se modificó nada."; exit 0; }
       log ""
       log "${NEGRITA}--- Después ---${NORMAL}"
