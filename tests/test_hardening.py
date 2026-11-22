@@ -262,6 +262,15 @@ class AuditoriaApagada(Servidor):
         self.assertIn("-e 1", self.leer("/etc/audit/rules.d/90-hardening.rules"))
         self.assertIn("reglas cargadas y auditoría del kernel activa", out.split("--- Después ---")[1])
 
+    def test_override_de_journald_solo_con_systemd_viejo(self):
+        override = self.raiz / "etc/systemd/system/systemd-journald.service.d/90-hardening-auditoria.conf"
+        self.correr("--aplicar", HARDENING_STUB_SYSTEMD="249")  # Ubuntu 22.04
+        self.assertIn("ExecStartPost=-/sbin/auditctl -e 1", override.read_text())
+        self.assertIn("systemctl daemon-reload", self.llamadas())
+        override.unlink()
+        self.correr("--aplicar", HARDENING_STUB_SYSTEMD="255")  # Ubuntu 24.04: no hace falta
+        self.assertFalse(override.exists())
+
 
 class CambioDePuerto(Servidor):
     def test_puerto_nuevo_y_socket(self):

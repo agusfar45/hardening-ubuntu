@@ -89,10 +89,17 @@ Endurecer SSH en un servidor remoto puede dejarte sin acceso. El script:
 
 - **auditd puede tener todas las reglas cargadas y no registrar nada.** En la imagen de Ubuntu 22.04 de
   GitHub Actions, `auditctl -l` mostraba las reglas y el servicio estaba activo, pero la auditoría del kernel
-  estaba apagada (`auditctl -s` → `enabled 0`). La primera versión de este script lo daba por bueno. Ahora la
-  auditoría lo marca como falta, el script lo activa (`auditctl -e 1`, y `-e 1` al final de las reglas para
-  que sobreviva al reinicio) y avisa si el kernel arrancó con `audit=0`. Para un perito, esto significa que
-  el log de auditoría puede estar vacío aunque "todo esté configurado".
+  estaba apagada (`auditctl -s` → `enabled 0`). La primera versión de este script lo daba por bueno.
+  Rastreando la causa encontré que **en Ubuntu 22.04 (systemd 249) cada reinicio de `systemd-journald` apaga
+  la auditoría del kernel**. Con las actualizaciones automáticas activadas, una actualización de systemd la
+  dejaría apagada sin aviso. Ahora el script:
+  - la marca como falta en la auditoría;
+  - la activa (`auditctl -e 1`, y `-e 1` al final de las reglas);
+  - la vuelve a comprobar después de cada paso;
+  - con systemd anterior a 253, agrega un override de `systemd-journald.service` (`ExecStartPost=auditctl -e 1`).
+
+  El CI reinicia journald y comprueba que siga en `enabled 1`. Para un perito, la conclusión es que el log de
+  auditoría puede estar vacío aunque "todo esté configurado".
 
 - **En `sshd_config` gana el primer valor, no el último.** Las imágenes cloud de Ubuntu traen
   `/etc/ssh/sshd_config.d/50-cloud-init.conf` con `PasswordAuthentication yes`. Un archivo `99-hardening.conf`
@@ -114,7 +121,7 @@ Dos niveles, los dos en [GitHub Actions](.github/workflows/pruebas.yml):
 
 1. **Servidor simulado** ([tests/](tests/)): una carpeta con un Ubuntu falso con los problemas del Caso 3 y
    simuladores de `sshd`, `ufw`, `systemctl`, `fail2ban-client`, `auditctl`, etc. El de `sshd -T` aplica la
-   regla de "gana el primero". Son 16 pruebas, ejecutables también en Windows con Git Bash
+   regla de "gana el primero". Son 17 pruebas, ejecutables también en Windows con Git Bash
    (`python -m unittest -v`):
    - auditoría;
    - que simular no cambie nada;
@@ -123,7 +130,7 @@ Dos niveles, los dos en [GitHub Actions](.github/workflows/pruebas.yml):
    - Ubuntu 20.04;
    - cambio de puerto con socket;
    - fail2ban con journal;
-   - auditoría del kernel apagada (`enabled 0`).
+   - auditoría del kernel apagada (`enabled 0`) y override de journald.
 2. **Ubuntu 22.04 y 24.04 reales** (máquinas virtuales descartables de GitHub):
    1. Se arma un servidor que acepta contraseña y se confirma que entra.
    2. Se aplica el script.

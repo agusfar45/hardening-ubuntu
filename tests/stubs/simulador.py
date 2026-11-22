@@ -86,6 +86,10 @@ def sshd(args):
 
 
 def systemctl(args):
+    if args == ["--version"]:
+        v = os.environ.get("HARDENING_STUB_SYSTEMD", "255")
+        print(f"systemd {v} ({v}.4-1ubuntu8)\n+PAM +AUDIT +SELINUX")
+        return 0
     activos = set(leer_json("activos.json", []))
     if args[:2] == ["is-active", "--quiet"]:
         return 0 if args[2] in activos else 3

@@ -64,6 +64,9 @@ jobs:
           sudo ufw status | grep -q "Status: active"
           sudo fail2ban-client status sshd
           sudo auditctl -l | grep -E "usuarios|transferencia|antiforense|borrado_logs|comandos_root"
+          # En 22.04 reiniciar journald apagaba la auditoría del kernel: tiene que seguir activa
+          sudo systemctl restart systemd-journald && sleep 1
+          sudo auditctl -s | grep -x "enabled 1"
           echo "curl en el PATH: $(type -a curl | tr '\n' ' ')"
           /usr/bin/curl -s -o /dev/null https://example.com || true
           # auditd escribe en disco de forma asíncrona (flush = INCREMENTAL_ASYNC): un poco de

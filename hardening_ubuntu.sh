@@ -464,6 +464,20 @@ paso_auditd() {
     fi
   fi
   asegurar_auditoria "las reglas se cargaron con la auditoría del kernel apagada"
+
+  # Con systemd < 253 (Ubuntu 22.04), cada vez que systemd-journald arranca apaga la auditoría del
+  # kernel (comprobado en el CI). Con las actualizaciones automáticas, una actualización de systemd
+  # la dejaría apagada sin aviso. El override la vuelve a activar en cada arranque de journald.
+  local version_systemd
+  version_systemd="$(systemctl --version 2>/dev/null | awk 'NR == 1 { print $2 + 0 }')"
+  if [[ ${version_systemd:-999} -lt 253 ]]; then
+    escribir /etc/systemd/system/systemd-journald.service.d/90-hardening-auditoria.conf 644 << 'EOF'
+# hardening_ubuntu.sh — systemd < 253: journald apaga la auditoría del kernel al arrancar
+[Service]
+ExecStartPost=-/sbin/auditctl -e 1
+EOF
+    (( CAMBIO )) && ejecutar systemctl daemon-reload
+  fi
   return 0
 }
 
@@ -571,6 +585,7 @@ revertir() {
   if (( ufw_inactivo )); then ejecutar ufw --force disable; else ejecutar ufw reload || true; fi
   ejecutar systemctl restart fail2ban || true
   ejecutar augenrules --load || true
+  ejecutar systemctl daemon-reload || true
   ejecutar systemctl restart systemd-journald || true
   ejecutar sysctl --system > /dev/null || true
   if grep -q "/etc/rsyslog.d/" "$dir/MANIFIESTO"; then ejecutar systemctl restart rsyslog || true; fi
