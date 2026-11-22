@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# python3 de las pruebas (en Windows/Git Bash no existe "python3")
+exec "${HARDENING_PY:?}" "$@"

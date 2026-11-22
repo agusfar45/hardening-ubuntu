@@ -1,0 +1,84 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  simulado:
+    name: Servidor simulado + shellcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S warning hardening_ubuntu.sh
+      - name: Pruebas con el servidor simulado
+        run: python3 -m unittest -v
+
+  ubuntu-real:
+    # Máquinas virtuales Ubuntu reales y descartables: el script se aplica de verdad
+    name: Ubuntu ${{ matrix.version }} real
+    runs-on: ubuntu-${{ matrix.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["22.04", "24.04"]
+    env:
+      SSH_OPTS: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR
+      CLAVE_PRUEBA: ClaveDePrueba-123
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar un servidor vulnerable (como el del Caso 3)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq openssh-server sshpass
+          echo "runner:$CLAVE_PRUEBA" | sudo chpasswd
+          chmod go-w ~ && mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keygen -q -t ed25519 -N '' -f ~/.ssh/id_prueba
+          cat ~/.ssh/id_prueba.pub >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+          echo "PasswordAuthentication yes" | sudo tee /etc/ssh/sshd_config.d/50-cloud-init.conf
+          sudo systemctl restart ssh
+          sshpass -p "$CLAVE_PRUEBA" ssh $SSH_OPTS -o PubkeyAuthentication=no runner@127.0.0.1 'echo "ANTES: entra con contraseña"'
+
+      - name: Auditar (antes)
+        run: sudo ./hardening_ubuntu.sh --auditar || true
+
+      - name: Simular
+        run: sudo ./hardening_ubuntu.sh --simular --ssh-desde 127.0.0.0/8
+
+      - name: Aplicar
+        run: sudo ./hardening_ubuntu.sh --aplicar --ssh-desde 127.0.0.0/8 || echo "Terminó con código $? (cuentas para revisar)"
+
+      - name: Verificar en el sistema real
+        run: |
+          sudo sshd -T | grep -E '^(passwordauthentication|kbdinteractiveauthentication|permitrootlogin|maxauthtries|loglevel) '
+          sudo sshd -T | grep -qx 'passwordauthentication no'
+          ssh $SSH_OPTS -i ~/.ssh/id_prueba -o BatchMode=yes runner@127.0.0.1 'echo "DESPUÉS: entra con clave"'
+          if sshpass -p "$CLAVE_PRUEBA" ssh $SSH_OPTS -o PubkeyAuthentication=no runner@127.0.0.1 true; then
+            echo "ERROR: todavía acepta contraseña"; exit 1
+          fi
+          echo "DESPUÉS: la contraseña es rechazada"
+          sudo ufw status verbose
+          sudo ufw status | grep -q "Status: active"
+          sudo fail2ban-client status sshd
+          sudo auditctl -l | grep -E "key=(usuarios|transferencia|antiforense|borrado_logs)"
+          curl -s -o /dev/null https://example.com || true
+          sleep 2
+          echo "auditd registró el uso de curl:"
+          sudo ausearch -k transferencia -i | grep -m1 "curl"
+
+      - name: Idempotencia (segunda corrida)
+        run: |
+          sudo ./hardening_ubuntu.sh --aplicar --ssh-desde 127.0.0.0/8 > segunda.txt || true
+          cat segunda.txt
+          grep -q "00-hardening.conf (sin cambios)" segunda.txt
+          ! grep -q "systemctl reload ssh" segunda.txt
+
+      - name: Revertir
+        run: |
+          sudo ./hardening_ubuntu.sh --revertir "$(ls -d /var/backups/hardening-* | head -1)"
+          sudo sshd -T | grep -qx 'passwordauthentication yes'
+          sshpass -p "$CLAVE_PRUEBA" ssh $SSH_OPTS -o PubkeyAuthentication=no runner@127.0.0.1 'echo "REVERTIDO: vuelve a entrar con contraseña"'
+          sudo ufw status | grep -q "Status: inactive"

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "${HARDENING_PY:?}" "$(dirname "$0")/simulador.py" sshd "$@"
