@@ -73,7 +73,13 @@ jobs:
           echo "auditd registró el uso de curl:"
           # --input-logs: sin terminal (scripts, CI, cron) ausearch lee de stdin y no encuentra nada
           sudo ausearch --input-logs -k transferencia -i | tee eventos.txt | tail -n 6
-          grep -q "curl" eventos.txt
+          if ! grep -q "curl" eventos.txt; then
+            echo "--- diagnóstico: reglas completas, rules.d, estado y búsqueda por ejecutable"
+            sudo auditctl -l; ls -la /etc/audit/rules.d/; sudo auditctl -s
+            sudo ausearch --input-logs -x /usr/bin/curl -i | tail -n 5 || true
+            sudo grep -c "" /var/log/audit/audit.log; uname -r; dpkg -l auditd | tail -1
+            exit 1
+          fi
 
       - name: Idempotencia (segunda corrida)
         run: |
