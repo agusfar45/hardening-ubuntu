@@ -64,7 +64,8 @@ jobs:
           sudo ufw status | grep -q "Status: active"
           sudo fail2ban-client status sshd
           sudo auditctl -l | grep -E "usuarios|transferencia|antiforense|borrado_logs|comandos_root"
-          curl -s -o /dev/null https://example.com || true
+          echo "curl en el PATH: $(type -a curl | tr '\n' ' ')"
+          /usr/bin/curl -s -o /dev/null https://example.com || true
           sleep 2
           echo "auditd registró el uso de curl:"
           # --input-logs: sin terminal (scripts, CI, cron) ausearch lee de stdin y no encuentra nada
