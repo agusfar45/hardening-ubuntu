@@ -75,9 +75,12 @@ jobs:
           sudo ausearch --input-logs -k transferencia -i | tee eventos.txt | tail -n 6
           if ! grep -q "curl" eventos.txt; then
             echo "--- diagnóstico: reglas completas, rules.d, estado y búsqueda por ejecutable"
-            sudo auditctl -l; ls -la /etc/audit/rules.d/; sudo auditctl -s
+            sudo ls -la /etc/audit/rules.d/ || true
+            sudo auditctl -s || true
             sudo ausearch --input-logs -x /usr/bin/curl -i | tail -n 5 || true
-            sudo grep -c "" /var/log/audit/audit.log; uname -r; dpkg -l auditd | tail -1
+            sudo ausearch --input-logs -m EXECVE -i | grep -m3 curl || true
+            sudo grep -c "" /var/log/audit/audit.log || true
+            uname -r; dpkg -l auditd | tail -1; ls -li /usr/bin/curl; stat -c '%i %n' /usr/bin/curl /bin/curl || true
             exit 1
           fi
 
