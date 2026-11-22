@@ -39,7 +39,8 @@ sudo ./hardening_ubuntu.sh --revertir /var/backups/hardening-20261114-091500
 | `--omitir ssh,ufw,...` | Saltea pasos (`ssh`, `ufw`, `fail2ban`, `auditd`, `journald`, `actualizaciones`, `sysctl`) |
 
 Después, para investigar con auditd: `sudo ausearch -k transferencia -i`, `-k usuarios`, `-k borrado_logs`,
-`-k comandos_root`.
+`-k comandos_root`. **En un script o en cron hay que agregar `--input-logs`:** sin una terminal, `ausearch`
+lee de la entrada estándar y responde `<no matches>` aunque los eventos estén en el log (me pasó en el CI).
 
 ### Ejemplo: antes y después (servidor de prueba con los problemas del Caso 3)
 
@@ -97,6 +98,8 @@ Endurecer SSH en un servidor remoto puede dejarte sin acceso. El script:
   usa `backend = systemd` para leer el journal.
 - **Bash:** `algo | función` ejecuta la función en un subshell y sus variables se pierden. El script usa
   `función < <(algo)`.
+- **`ausearch` en scripts necesita `--input-logs`.** En el CI auditd registraba bien el uso de `curl` (se veía
+  en `audit.log`), pero `ausearch -k` no lo encontraba: sin terminal, lee de stdin.
 
 ## Pruebas
 
