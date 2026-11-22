@@ -63,9 +63,13 @@ jobs:
           sudo ufw status verbose
           sudo ufw status | grep -q "Status: active"
           sudo fail2ban-client status sshd
-          sudo auditctl -l | grep -E "key=(usuarios|transferencia|antiforense|borrado_logs)"
+          echo "--- diagnóstico de auditd"
+          sudo auditctl -s
+          sudo auditctl -l | grep -E "usuarios|transferencia|antiforense|borrado_logs|comandos_root"
+          systemctl is-active auditd
           curl -s -o /dev/null https://example.com || true
-          sleep 2
+          sleep 3
+          sudo tail -n 5 /var/log/audit/audit.log || true
           echo "auditd registró el uso de curl:"
           sudo ausearch -k transferencia -i | grep -m1 "curl"
 
