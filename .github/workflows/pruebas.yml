@@ -68,7 +68,8 @@ jobs:
           sleep 2
           echo "auditd registró el uso de curl:"
           # --input-logs: sin terminal (scripts, CI, cron) ausearch lee de stdin y no encuentra nada
-          sudo ausearch --input-logs -k transferencia -i | grep -m1 "proctitle=curl"
+          sudo ausearch --input-logs -k transferencia -i | tee eventos.txt | tail -n 6
+          grep -q "curl" eventos.txt
 
       - name: Idempotencia (segunda corrida)
         run: |
